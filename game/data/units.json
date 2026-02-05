@@ -1,0 +1,34 @@
+{
+  "units": [
+    {
+      "id": "knight_lawrence",
+      "name": "로렌스",
+      "class": "Knight",
+      "hp": 60,
+      "max_hp": 60,
+      "speed": 40,
+      "energy": 3,
+      "position": "front"
+    },
+    {
+      "id": "archer_erin",
+      "name": "에린",
+      "class": "Archer",
+      "hp": 40,
+      "max_hp": 40,
+      "speed": 70,
+      "energy": 3,
+      "position": "back"
+    },
+    {
+      "id": "cleric_isabel",
+      "name": "이사벨",
+      "class": "Cleric",
+      "hp": 45,
+      "max_hp": 45,
+      "speed": 30,
+      "energy": 4,
+      "position": "mid"
+    }
+  ]
+}

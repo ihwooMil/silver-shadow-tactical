@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Silver-Shadow Tactical Evolved</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <style>
+        :root { --tile-size: 50px; }
+        body { background: #050505; color: #eee; font-family: sans-serif; margin: 0; overflow: hidden; display: flex; flex-direction: column; height: 100vh; user-select: none; }
+        #timeline { height: 35px; background: #1a1a1a; position: relative; border-bottom: 1px solid #333; }
+        .marker { position: absolute; top: 4px; width: 22px; height: 22px; border-radius: 50%; border: 2px solid #fff; font-size: 9px; display: flex; align-items: center; justify-content: center; transition: left 0.1s; }
+        #battle-container { flex: 1; display: flex; align-items: center; justify-content: center; background: #111; overflow: hidden; }
+        #grid { display: grid; grid-template-columns: repeat(7, var(--tile-size)); grid-template-rows: repeat(4, var(--tile-size)); gap: 4px; background: #222; padding: 10px; border-radius: 8px; }
+        .tile { width: var(--tile-size); height: var(--tile-size); background: #2a2a2a; border-radius: 4px; position: relative; }
+        .tile.in-range { background: rgba(255, 77, 77, 0.4); outline: 1px solid #ff4d4d; }
+        .tile.movable { background: rgba(77, 184, 255, 0.4); outline: 1px solid #4db8ff; }
+        .tile.aoe-range { background: rgba(255, 165, 0, 0.4); outline: 1px solid #ffa500; }
+
+        .unit-container { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; }
+        .hero-sprite { 
+            width: 80px; height: 100px; 
+            background-size: 160px 300px; 
+            position: absolute; bottom: 5px; left: 50%; transform: translateX(-50%); 
+            pointer-events: none; transition: background-position 0.2s;
+        }
+        .unit-container.active .hero-sprite { animation: float 2s infinite ease-in-out; filter: drop-shadow(0 0 10px #fff); }
+        @keyframes float { 0%, 100% { transform: translateX(-50%) translateY(0); } 50% { transform: translateX(-50%) translateY(-6px); } }
+
+        .unit-hp-box { position: absolute; bottom: -5px; width: 85%; height: 8px; background: #000; border: 1px solid #444; border-radius: 4px; overflow: hidden; }
+        .hp-bar { height: 100%; background: #ff4d4d; position: absolute; left: 0; }
+        .block-bar { height: 100%; background: #4d79ff; position: absolute; left: 0; z-index: 2; opacity: 0.8; }
+        .block-text { position: absolute; top: -18px; color: #4d79ff; font-weight: bold; font-size: 11px; }
+
+        #ui-layer { height: 260px; background: linear-gradient(to top, #0f172a, #1e293b); border-top: 2px solid #334155; position: relative; }
+        #info-panel { height: 40px; display: flex; justify-content: space-between; align-items: center; padding: 0 20px; color: #fbbf24; font-weight: bold; }
+        #hand { position: relative; height: 180px; width: 100%; display: flex; justify-content: center; margin-top: 10px; }
+        .card { 
+            position: absolute; width: 85px; height: 130px; background: #1e293b; border: 2px solid #3b82f6; border-radius: 10px; 
+            display: flex; flex-direction: column; padding: 8px; transition: transform 0.3s, z-index 0.3s;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5); cursor: pointer; touch-action: none;
+        }
+        .card.focused { transform: translateY(-30px) scale(1.15) !important; z-index: 500 !important; border-color: #fbbf24; }
+        .card.selected { border-color: #fbbf24; z-index: 499 !important; }
+        .card.dragging { position: fixed; transform: scale(1.1); opacity: 0.9; z-index: 1000; pointer-events: none; border-color: #fbbf24; }
+        .card.disabled { opacity: 0.4; pointer-events: none; }
+        .card-cost { position: absolute; top: -8px; right: -8px; background: #ef4444; color: white; width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; border: 2px solid #0f172a; }
+        .card-name { font-size: 11px; font-weight: bold; text-align: center; margin-bottom: 5px; color: #fff; border-bottom: 1px solid #334155; }
+        .card-desc { font-size: 9px; color: #94a3b8; text-align: center; line-height: 1.2; }
+        .shake { animation: shake 0.2s; }
+        @keyframes shake { 0%, 100% { transform: translate(0,0); } 25% { transform: translate(4px,0); } 75% { transform: translate(-4px,0); } }
+    </style>
+</head>
+<body>
+    <div id="timeline"></div>
+    <div id="battle-container"><div id="grid"></div></div>
+    <div id="ui-layer">
+        <div id="info-panel">
+            <span id="unit-info">-</span>
+            <span id="energy-info">⚡ 0</span>
+            <button onclick="endTurn()" style="background:#ef4444; color:white; border:none; padding:5px 12px; border-radius:12px; cursor:pointer; font-weight:bold;">턴 종료</button>
+        </div>
+        <div id="hand"></div>
+    </div>
+
+    <script>
+        let gid = 0;
+        const state = {
+            units: [
+                { id: 'u1', name: '로렌스', class: 'Knight', hp: 100, maxHp: 100, speed: 40, pos: 0, team: 'p', sprite: 'lawrence.jpg', x: 0, y: 1, energy: 3, hand: [], deck: [], discard: [], block: 0, status: 'idle' },
+                { id: 'u2', name: '에린', class: 'Archer', hp: 60, maxHp: 60, speed: 70, pos: 0, team: 'p', sprite: 'erin.jpg', x: 0, y: 2, energy: 3, hand: [], deck: [], discard: [], block: 0, status: 'idle' },
+                { id: 'u3', name: '이사벨', class: 'Mage', hp: 50, maxHp: 50, speed: 30, pos: 10, team: 'p', sprite: 'isabel.jpg', x: 0, y: 0, energy: 3, hand: [], deck: [], discard: [], block: 0, status: 'idle' },
+                { id: 'e1', name: '보스', class: 'Boss', hp: 400, maxHp: 400, speed: 30, pos: 20, team: 'e', sprite: 'enemy_boss.jpg', x: 6, y: 1, block: 0, status: 'idle' }
+            ],
+            currentTurn: null, selectedCard: null, dragEl: null, isPaused: false, isDragging: false
+        };
+
+        const jobCards = {
+            Knight: [ { name: '검격', cost: 1, type: 'atk', val: 12, range: 1, desc: '인접 12 피해' }, { name: '철벽 방어', cost: 1, type: 'def', val: 20, desc: '방어도 20 획득' }, { name: '신속 이동', cost: 1, type: 'mov', range: 3, desc: '3칸 이동' } ],
+            Archer: [ { name: '저격', cost: 2, type: 'atk', val: 20, range: 6, desc: '장거리 20 피해' }, { name: '화살 비', cost: 2, type: 'aoe', val: 10, range: 4, desc: '범위 10 피해' }, { name: '회피', cost: 1, type: 'mov', range: 2, desc: '2칸 이동' } ],
+            Mage: [ { name: '화염구', cost: 2, type: 'aoe', val: 15, range: 4, desc: '광역 15 피해' }, { name: '신성한 치유', cost: 1, type: 'heal', val: 20, range: 3, desc: '아군 20 치유' }, { name: '순간 이동', cost: 1, type: 'mov', range: 2, desc: '2칸 이동' } ]
+        };
+
+        const spriteMap = { 'idle': { x: 0, y: 0 }, 'ready': { x: 1, y: 0 }, 'attack': { x: 0, y: 1 }, 'skill': { x: 1, y: 1 }, 'hit': { x: 0, y: 2 }, 'dead': { x: 1, y: 2 } };
+
+        function init() {
+            state.units.filter(u => u.team === 'p').forEach(u => {
+                const myCards = jobCards[u.class];
+                for(let i=0; i<12; i++) u.deck.push({...myCards[i % myCards.length], gid: gid++});
+                u.deck.sort(()=>Math.random()-0.5);
+            });
+            render(); tick();
+        }
+
+        function tick() {
+            if (!state.isPaused) {
+                state.units.forEach(u => { if (u.hp > 0) u.pos += u.speed * 0.05; if (u.pos >= 100) { u.pos = 100; startTurn(u); } });
+                renderTimeline();
+            }
+            requestAnimationFrame(tick);
+        }
+
+        function startTurn(u) {
+            state.isPaused = true; state.currentTurn = u;
+            if (u.team === 'p') {
+                u.energy = 3; u.status = 'ready';
+                for(let i=0; i<5; i++) {
+                    if(u.deck.length === 0) { u.deck = [...u.discard]; u.discard = []; u.deck.sort(()=>Math.random()-0.5); }
+                    if(u.deck.length > 0) u.hand.push(u.deck.pop());
+                }
+                render();
+            } else {
+                processEnemyTurn(u);
+            }
+        }
+
+        function processEnemyTurn(u) {
+            const targets = state.units.filter(un => un.team === 'p' && un.hp > 0);
+            if (targets.length === 0) return endTurn();
+            
+            // 가장 가까운 적 찾기
+            targets.sort((a, b) => (Math.abs(u.x - a.x) + Math.abs(u.y - a.y)) - (Math.abs(u.x - b.x) + Math.abs(u.y - b.y)));
+            const target = targets[0];
+            const dist = Math.abs(u.x - target.x) + Math.abs(u.y - target.y);
+
+            if (dist > 2) {
+                // 적이 멀면 이동 (아군 방향으로)
+                const dx = target.x > u.x ? 1 : (target.x < u.x ? -1 : 0);
+                const dy = target.y > u.y ? 1 : (target.y < u.y ? -1 : 0);
+                u.x += dx; u.y += dy;
+                render();
+                setTimeout(() => executeEnemyAttack(u, target), 600);
+            } else {
+                executeEnemyAttack(u, target);
+            }
+        }
+
+        function executeEnemyAttack(u, target) {
+            u.status = 'attack'; render();
+            setTimeout(() => {
+                applyDamage(target, 15);
+                u.pos = 0; u.status = 'idle'; state.isPaused = false; state.currentTurn = null; render();
+            }, 1000);
+        }
+
+        function applyDamage(target, amount) {
+            target.status = 'hit';
+            if (target.block >= amount) { target.block -= amount; }
+            else { const remain = amount - target.block; target.block = 0; target.hp = Math.max(0, target.hp - remain); }
+            render();
+            setTimeout(() => { if(target.hp > 0) target.status = 'idle'; render(); }, 1000);
+        }
+
+        function endTurn() {
+            const u = state.currentTurn;
+            if (u && u.team === 'p') { u.discard.push(...u.hand); u.hand = []; u.pos = 0; u.status = 'idle'; }
+            state.isPaused = false; state.currentTurn = null; state.selectedCard = null; render();
+        }
+
+        function render() {
+            const grid = document.getElementById('grid'); grid.innerHTML = '';
+            for (let y = 0; y < 4; y++) {
+                for (let x = 0; x < 7; x++) {
+                    const tile = document.createElement('div'); tile.className = 'tile'; tile.dataset.x = x; tile.dataset.y = y;
+                    const u = state.currentTurn, c = state.selectedCard;
+                    if (u && c) {
+                        const d = Math.abs(u.x - x) + Math.abs(u.y - y);
+                        if (d <= c.range) tile.classList.add(c.type === 'atk' ? 'in-range' : (c.type === 'aoe' ? 'aoe-range' : 'movable'));
+                    }
+                    const unit = state.units.find(un => un.x === x && un.y === y && un.hp >= 0);
+                    if (unit) {
+                        const s = unit.hp <= 0 ? spriteMap['dead'] : spriteMap[unit.status];
+                        tile.innerHTML = `
+                            <div class="unit-container ${state.currentTurn === unit ? 'active' : ''}">
+                                <div class="hero-sprite" style="background-image: url('assets/${unit.sprite}'); background-position: -${s.x * 80}px -${s.y * 100}px;"></div>
+                                ${unit.block > 0 ? `<div class="block-text">🛡️ ${unit.block}</div>` : ''}
+                                <div class="unit-hp-box"><div class="hp-bar" style="width:${(unit.hp/unit.maxHp)*100}%"></div><div class="block-bar" style="width:${(unit.block/unit.maxHp)*100}%"></div></div>
+                            </div>
+                        `;
+                    }
+                    tile.onclick = () => { if (state.selectedCard && !state.isDragging) tryUseCard(x, y); };
+                    grid.appendChild(tile);
+                }
+            }
+            renderHand();
+        }
+
+        function renderHand() {
+            const hand = document.getElementById('hand'); hand.innerHTML = '';
+            const u = state.currentTurn;
+            if (u && u.team === 'p') {
+                document.getElementById('unit-info').innerText = `${u.name} (${u.class})`;
+                document.getElementById('energy-info').innerText = `⚡ ${u.energy}`;
+                u.hand.forEach((c, i) => {
+                    const card = document.createElement('div');
+                    const offset = (i - (u.hand.length - 1) / 2) * 40;
+                    const rotate = (i - (u.hand.length - 1) / 2) * 6;
+                    card.className = `card ${u.energy < c.cost ? 'disabled' : ''} ${state.selectedCard === c ? 'selected' : ''}`;
+                    card.style.left = `calc(50% - 42px + ${offset}px)`;
+                    card.style.transform = `rotate(${rotate}deg)`;
+                    card.style.zIndex = i;
+                    card.innerHTML = `<div class="card-cost">${c.cost}</div><div class="card-name">${c.name}</div><div class="card-desc">${c.desc}</div>`;
+                    card.onpointerenter = () => card.classList.add('focused');
+                    card.onpointerleave = () => card.classList.remove('focused');
+                    card.onpointerdown = (e) => {
+                        if (u.energy < c.cost) return;
+                        state.selectedCard = c; state.isDragging = false;
+                        state.dragEl = card.cloneNode(true); state.dragEl.classList.add('dragging');
+                        document.body.appendChild(state.dragEl); moveDrag(e); render();
+                    };
+                    hand.appendChild(card);
+                });
+            }
+        }
+
+        function tryUseCard(x, y) {
+            const u = state.currentTurn, c = state.selectedCard;
+            if (!u || !c || u.energy < c.cost) return;
+            const d = Math.abs(u.x - x) + Math.abs(u.y - y);
+            const target = state.units.find(un => un.x === x && un.y === y && un.hp > 0);
+            let ok = false;
+            if (c.type === 'atk' && target && target.team === 'e' && d <= c.range) { applyDamage(target, c.val); ok = true; u.status = 'attack'; }
+            else if (c.type === 'mov' && !target && d <= c.range) { u.x = x; u.y = y; ok = true; }
+            else if (c.type === 'aoe' && d <= c.range) { state.units.filter(un => un.team === 'e' && (Math.abs(un.x - x) + Math.abs(un.y - y) <= 1)).forEach(un => applyDamage(un, c.val)); ok = true; u.status = 'skill'; }
+            else if (c.type === 'def') { u.block += c.val; ok = true; u.status = 'skill'; }
+            else if (c.type === 'heal') { const f = state.units.find(un => un.x === x && un.y === y && un.team === 'p' && un.hp > 0); if (f) { f.hp = Math.min(f.maxHp, f.hp + c.val); ok = true; u.status = 'skill'; } }
+            if (ok) {
+                u.energy -= c.cost; u.hand = u.hand.filter(card => card.gid !== c.gid); u.discard.push(c); state.selectedCard = null;
+                document.getElementById('battle-container').classList.add('shake');
+                setTimeout(() => { document.getElementById('battle-container').classList.remove('shake'); if(u.hp > 0) u.status = 'idle'; render(); }, 1000);
+            }
+        }
+
+        function moveDrag(e) { if (state.dragEl) { state.dragEl.style.left = (e.clientX - 42) + 'px'; state.dragEl.style.top = (e.clientY - 65) + 'px'; state.isDragging = true; } }
+        window.onpointermove = moveDrag;
+        window.onpointerup = (e) => {
+            if (state.dragEl) {
+                const el = document.elementFromPoint(e.clientX, e.clientY);
+                const tile = el ? el.closest('.tile') : null;
+                if (tile && state.isDragging) tryUseCard(parseInt(tile.dataset.x), parseInt(tile.dataset.y));
+                state.dragEl.remove(); state.dragEl = null; if (state.isDragging) state.selectedCard = null;
+                state.isDragging = false; render();
+            }
+        };
+
+        function renderTimeline() {
+            const tl = document.getElementById('timeline'); tl.innerHTML = '';
+            state.units.forEach(u => { if(u.hp > 0) { const m = document.createElement('div'); m.className = 'marker'; m.style.left = `${u.pos}%`; m.style.background = u.color; m.innerText = u.name[0]; tl.appendChild(m); } });
+        }
+        init();
+    </script>
+</body>
+</html>
