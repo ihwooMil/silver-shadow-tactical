@@ -14,6 +14,9 @@ func _ready():
 	engine.turn_started.connect(_on_turn_started)
 
 func load_json(path):
+	if not FileAccess.file_exists(path):
+		push_error("JSON file not found: " + path)
+		return {"units": []}
 	var file = FileAccess.open(path, FileAccess.READ)
 	var content = file.get_as_text()
 	return JSON.parse_string(content)
