@@ -14,6 +14,11 @@ func setup(unit_list: Array):
 func _process(delta):
 	if not is_active: return
 	
+	if units.is_empty():
+		print("WARNING: BattleEngine has no units!")
+		is_active = false
+		return
+		
 	for unit in units:
 		if unit.hp <= 0: continue
 		
