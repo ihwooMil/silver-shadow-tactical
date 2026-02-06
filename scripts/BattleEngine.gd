@@ -1,24 +1,30 @@
-extends Node2D
+extends Node
 
-var turn_count = 0
+class_name BattleEngine
 
-func _ready():
-	print("Battle Started")
-	new_turn()
+signal turn_started(unit_data)
 
-func new_turn():
-	turn_count += 1
-	$CanvasLayer/TurnLabel.text = "Turn: %d" % turn_count
-	$CanvasLayer/LogLabel.text = "Player Turn Started..."
+var units = []
+var is_active = false
 
-func _on_attack_button_pressed():
-	$CanvasLayer/LogLabel.text = "Player used Strike! Dealt 6 Damage."
-	await get_tree().create_timer(1.0).timeout
-	enemy_turn()
+func setup(unit_list: Array):
+	units = unit_list
+	is_active = true
 
-func enemy_turn():
-	$CanvasLayer/LogLabel.text = "Enemy Turn..."
-	await get_tree().create_timer(1.0).timeout
-	$CanvasLayer/LogLabel.text = "Enemy Attacked! Took 5 Damage."
-	await get_tree().create_timer(1.0).timeout
-	new_turn()
+func _process(delta):
+	if not is_active: return
+	
+	for unit in units:
+		if unit.hp <= 0: continue
+		
+		# 속도에 비례해 position (0~100) 증가
+		unit.position += unit.speed * delta
+		
+		if unit.position >= 100:
+			unit.position = 0
+			is_active = false # 턴 처리 중 정지
+			emit_signal("turn_started", unit)
+			return
+
+func resume():
+	is_active = true
