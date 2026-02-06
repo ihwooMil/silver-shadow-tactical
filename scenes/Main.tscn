@@ -1,0 +1,11 @@
+[gd_scene format=3 uid="uid://b8d8d8d8d8d8"]
+
+[node name="Main" type="Node2D"]
+
+[node name="Label" type="Label" parent="."]
+offset_left = 512.0
+offset_top = 300.0
+offset_right = 768.0
+offset_bottom = 326.0
+text = "Project Silver Shadow - Initialized"
+horizontal_alignment = 1
