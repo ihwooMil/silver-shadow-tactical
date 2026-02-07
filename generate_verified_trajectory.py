@@ -51,27 +51,45 @@ def generate_flight_data():
         lifts.append(fdm.get_property_value('forces/lift-lbs'))
 
     # 그래프 생성
-    fig, axes = plt.subplots(2, 2, figsize=(12, 8))
+    fig = plt.figure(figsize=(15, 10))
     
-    axes[0, 0].plot(times, altitudes)
-    axes[0, 0].set_title('Altitude (ft)')
-    axes[0, 0].grid(True)
+    # 2D 서브플롯들
+    ax1 = fig.add_subplot(2, 2, 1)
+    ax1.plot(times, altitudes, color='blue')
+    ax1.set_title('Altitude (ft)')
+    ax1.grid(True)
     
-    axes[0, 1].plot(times, speeds)
-    axes[0, 1].set_title('Airspeed (kts)')
-    axes[0, 1].grid(True)
+    ax2 = fig.add_subplot(2, 2, 2)
+    ax2.plot(times, speeds, color='green')
+    ax2.set_title('Airspeed (kts)')
+    ax2.grid(True)
     
-    axes[1, 0].plot(times, pitches)
-    axes[1, 0].set_title('Pitch Angle (deg)')
-    axes[1, 0].grid(True)
+    ax3 = fig.add_subplot(2, 2, 4)
+    ax3.plot(times, pitches, color='red')
+    ax3.set_title('Pitch Angle (deg)')
+    ax3.grid(True)
     
-    axes[1, 1].plot(times, lifts)
-    axes[1, 1].set_title('Lift Force (lbs)')
-    axes[1, 1].grid(True)
+    # 3D 궤적 그래프 (NED 좌표계를 고려하여 가시화)
+    # 실제 이동 거리를 계산하기 위해 속도를 적분하는 대신, 
+    # 간단한 가시화를 위해 위도/경도/고도 변화를 사용하거나 
+    # 로컬 좌표계(X, Y, Z)가 있다면 그것을 사용합니다.
+    # 여기서는 고도 변화와 시간 흐름에 따른 가상의 X축 이동으로 3D 궤적을 표현합니다.
+    
+    ax4 = fig.add_subplot(2, 2, 3, projection='3d')
+    # 단순 가시화를 위해 X축은 시간*속도, Y축은 0, Z축은 고도로 설정
+    x_pos = [t * speeds[0] * 1.68781 for t in times] # kts to ft/s approx
+    y_pos = [0] * len(times)
+    
+    ax4.plot(x_pos, y_pos, altitudes, label='Flight Path', color='purple', lw=2)
+    ax4.set_xlabel('Downrange (ft)')
+    ax4.set_ylabel('Crossrange (ft)')
+    ax4.set_zlabel('Altitude (ft)')
+    ax4.set_title('3D Flight Trajectory')
+    ax4.legend()
     
     plt.tight_layout()
-    plt.savefig('verified_flight_trajectory.png')
-    print("Trajectory generated: verified_flight_trajectory.png")
+    plt.savefig('verified_flight_trajectory_3d.png')
+    print("3D Trajectory generated: verified_flight_trajectory_3d.png")
 
 if __name__ == "__main__":
     generate_flight_data()
